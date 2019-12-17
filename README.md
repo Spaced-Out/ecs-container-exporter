@@ -37,7 +37,8 @@ On ECS, add the following json to the task definition:
 ```
 The `PROMETHEUS_EXPORTER_PORT` label is for ECS discovery via https://github.com/teralytics/prometheus-ecs-discovery
 
-To exclude other sidecars use `--exclude` option.
+To include or exclude application containers use the `INCLUDE` or `EXCLUDE` environment variable. By default `ecs-container-exporter`
+and `~internal~ecs~pause`, which is a Fargate internal sidecar, is excluded.
 
 # TODO
 

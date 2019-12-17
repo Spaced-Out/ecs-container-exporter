@@ -320,9 +320,11 @@ def shutdown(sig_number, frame):
 
 
 @click.command()
-@click.option('--metadata-url', type=str, default=None, help='Override ECS Metadataurl')
-@click.option('--include', envvar='INCLUDE', type=str, default=None, help='Comma seperated list of container names to include')
-@click.option('--exclude', envvar='EXCLUDE', type=str, default=None, help='Comma seperated list of container names to exclude')
+@click.option('--metadata-url', type=str, default=None, help='Override ECS Metadata Url')
+@click.option('--include', envvar='INCLUDE', type=str, default=None,
+              help='Comma seperated list of container names to include, or use envvar INCLUDE')
+@click.option('--exclude', envvar='EXCLUDE', type=str, default=None,
+              help='Comma seperated list of container names to exclude, or use envvar EXCLUDE')
 def main(metadata_url=None, include=None, exclude=None):
     metadata_url = metadata_url or os.environ.get('ECS_CONTAINER_METADATA_URI', None)
 
