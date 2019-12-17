@@ -22,6 +22,7 @@ CGROUP_NO_VALUE = 0x7FFFFFFFFFFFF000
 
 class ECSContainerExporter(object):
 
+    include_containers = []
     exclude_containers = []
     _prefix = 'ecs_container_'
     # 1 - healthy, 0 - unhealthy
@@ -31,13 +32,15 @@ class ECSContainerExporter(object):
     # individual container tags
     task_container_tags = {}
 
-    def __init__(self, metadata_url=None, exclude_containers=None, http_timeout=60):
+    def __init__(self, metadata_url=None, include_containers=None, exclude_containers=None, http_timeout=60):
 
         self.task_metadata_url = urljoin(metadata_url + '/', 'task')
         self.task_stats_url = urljoin(metadata_url + '/', 'task/stats')
 
         if exclude_containers:
             self.exclude_containers = exclude_containers
+        if include_containers:
+            self.include_containers = include_containers
 
         self.http_timeout = http_timeout
 
@@ -46,6 +49,7 @@ class ECSContainerExporter(object):
                       f'metadata_url: {self.task_metadata_url}, '
                       f'task_stats_url: {self.task_stats_url}, '
                       f'http_timeout: {self.http_timeout}, '
+                      f'include_containers: {self.include_containers}, '
                       f'exclude_containers: {self.exclude_containers}')
 
         self.discover_task_metadata()
@@ -101,17 +105,32 @@ class ECSContainerExporter(object):
         for container in metadata['Containers']:
             container_id = container['DockerId']
             container_name = container['Name']
-            if container_name in self.exclude_containers:
-                self.log.info(f'Excluding container: {container_name} - {container_id} as per exclusion')
-            else:
-                self.task_container_tags[container_id] = {'container_name': container_name}
+
+            if self.should_process_container(container_name, self.include_containers,
+                                             self.exclude_containers):
                 self.log.info(f'Processing stats for container: {container_name} - {container_id}')
+                self.task_container_tags[container_id] = {'container_name': container_name}
 
                 # Cpu limit metric
                 value = container.get('Limits', {}).get('CPU', 0)
                 metric = self.create_metric('cpu_limit', value, self.task_container_tags[container_id],
                                             'gauge', 'Limit in percent of the CPU usage')
                 self.task_container_metrics.append(metric)
+            else:
+                self.log.info(f'Excluding container: {container_name} - {container_id} as per exclusion')
+
+    def should_process_container(self, container_name, include_containers, exclude_containers):
+        if container_name in exclude_containers:
+            process_container = False
+        else:
+            if include_containers:
+                if container_name in include_containers:
+                    process_container = True
+                else:
+                    process_container = False
+            else:
+                process_container = True
+        return process_container
 
     # every http request gets data from here
     def collect(self):
@@ -302,8 +321,9 @@ def shutdown(sig_number, frame):
 
 @click.command()
 @click.option('--metadata-url', type=str, default=None, help='Override ECS Metadataurl')
-@click.option('--exclude', type=str, default=None, help='Comma seperated list of container names to exclude')
-def main(metadata_url=None, exclude=None):
+@click.option('--include', envvar='INCLUDE', type=str, default=None, help='Comma seperated list of container names to include')
+@click.option('--exclude', envvar='EXCLUDE', type=str, default=None, help='Comma seperated list of container names to exclude')
+def main(metadata_url=None, include=None, exclude=None):
     metadata_url = metadata_url or os.environ.get('ECS_CONTAINER_METADATA_URI', None)
 
     if not metadata_url:
@@ -314,8 +334,13 @@ def main(metadata_url=None, exclude=None):
     signal.signal(signal.SIGINT, shutdown)
 
     if exclude:
-        exclude_containers=exclude.strip().split(',')
-    ECSContainerExporter(metadata_url=metadata_url, exclude_containers=exclude_containers)
+        exclude=exclude.strip().split(',')
+    if include:
+        include=include.strip().split(',')
+
+    ECSContainerExporter(metadata_url=metadata_url,
+                         include_containers=include,
+                         exclude_containers=exclude)
     # Start up the server to expose the metrics.
     start_http_server(9545)
     while True:
