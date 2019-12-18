@@ -121,16 +121,15 @@ class ECSContainerExporter(object):
 
     def should_process_container(self, container_name, include_containers, exclude_containers):
         if container_name in exclude_containers:
-            process_container = False
+            return False
         else:
             if include_containers:
                 if container_name in include_containers:
-                    process_container = True
+                    return True
                 else:
-                    process_container = False
+                    return False
             else:
-                process_container = True
-        return process_container
+                return True
 
     # every http request gets data from here
     def collect(self):
