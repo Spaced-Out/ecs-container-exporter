@@ -35,6 +35,7 @@ class ECSContainerExporter(object):
     def __init__(self, metadata_url=None, include_containers=None, exclude_containers=None, http_timeout=60):
 
         self.task_metadata_url = urljoin(metadata_url + '/', 'task')
+        # self.task_stats_url = urljoin(metadata_url + '/', 'stats')
         self.task_stats_url = urljoin(metadata_url + '/', 'task/stats')
 
         if exclude_containers:
@@ -195,6 +196,104 @@ class ECSContainerExporter(object):
         metric.add_metric(labels=tags.values(), value=value)
         return metric
 
+    def calculate_io_metrics(self, blkio_stats, tags):
+        """
+        Calculate IO metrics from the below data:
+
+        "blkio_stats": {
+            "io_merged_recursive": [],
+            "io_queue_recursive": [],
+            "io_service_bytes_recursive": [
+                {
+                    "major": 259,
+                    "minor": 0,
+                    "op": "Read",
+                    "value": 10653696
+                },
+                {
+                    "major": 259,
+                    "minor": 0,
+                    "op": "Write",
+                    "value": 0
+                },
+                {
+                    "major": 259,
+                    "minor": 0,
+                    "op": "Sync",
+                    "value": 10653696
+                },
+                {
+                    "major": 259,
+                    "minor": 0,
+                    "op": "Async",
+                    "value": 0
+                },
+                {
+                    "major": 259,
+                    "minor": 0,
+                    "op": "Total",
+                    "value": 10653696
+                }
+            ],
+            "io_service_time_recursive": [],
+            "io_serviced_recursive": [
+                {
+                    "major": 259,
+                    "minor": 0,
+                    "op": "Read",
+                    "value": 164
+                },
+                {
+                    "major": 259,
+                    "minor": 0,
+                    "op": "Write",
+                    "value": 0
+                },
+                {
+                    "major": 259,
+                    "minor": 0,
+                    "op": "Sync",
+                    "value": 164
+                },
+                {
+                    "major": 259,
+                    "minor": 0,
+                    "op": "Async",
+                    "value": 0
+                },
+                {
+                    "major": 259,
+                    "minor": 0,
+                    "op": "Total",
+                    "value": 164
+                }
+            ],
+            "io_time_recursive": [],
+            "io_wait_time_recursive": [],
+            "sectors_recursive": []
+        },
+        """
+        metrics = []
+
+        iostats = {'io_service_bytes_recursive': 'bytes', 'io_serviced_recursive': 'iops'}
+        for blk_key, blk_type in iostats.items():
+            read_counter = write_counter = 0
+            for blk_stat in blkio_stats.get(blk_key):
+                if blk_stat['op'] == 'Read' and 'value' in blk_stat:
+                    read_counter += blk_stat['value']
+                elif blk_stat['op'] == 'Write' and 'value' in blk_stat:
+                    write_counter += blk_stat['value']
+            metrics.append(
+                self.create_metric('disk_read_' + blk_type, read_counter, tags, 'counter',
+                                   'Total disk read ' + blk_type)
+            )
+            metrics.append(
+                self.create_metric('disk_written_' + blk_type, write_counter, tags, 'counter',
+                                   'Total disk written ' + blk_type)
+            )
+
+        return metrics
+
     def calculate_cpu_metrics(self, cpu_stats, prev_cpu_stats, tags):
         """
         Calculate cpu metrics based on the stats json:
@@ -251,7 +350,7 @@ class ECSContainerExporter(object):
                                     'CPU usage ratio')
         metrics.append(metric)
 
-        # per cpu metrics
+        # Per cpu metrics
         for i, value in enumerate(percpu_usage):
             # Skip inactive CPUs - https://github.com/torvalds/linux/commit/5ca3726
             if value != 0:
@@ -277,7 +376,7 @@ class ECSContainerExporter(object):
                                     'Same as user CPU usage reported in nanoseconds')
         metrics.append(metric)
 
-        # cpu throttling
+        # Cpu throttling
         throttling_data = cpu_stats.get('throttling_data')
         for mkey, mvalue in throttling_data.items():
             metric = self.create_metric('throttle_' + mkey, value, tags, 'counter')
@@ -311,7 +410,10 @@ class ECSContainerExporter(object):
                     metric = self.create_metric('mem_' + mkey, value, task_container_tags, 'gauge')
                     metrics.append(metric)
 
-            # TODO: I/O metrics
+            # I/O metrics
+            blkio_stats = container_stats.get('blkio_stats')
+
+            metrics.extend(self.calculate_io_metrics(blkio_stats, task_container_tags))
 
         except Exception as e:
             self.log.warning("Cold not retrieve metrics for {}: {}".format(task_container_tags, e), exc_info=True)
@@ -348,6 +450,7 @@ def main(metadata_url=None, include=None, exclude=None):
     ECSContainerExporter(metadata_url=metadata_url,
                          include_containers=include,
                          exclude_containers=exclude)
+
     # Start up the server to expose the metrics.
     start_http_server(9545)
     while True:
