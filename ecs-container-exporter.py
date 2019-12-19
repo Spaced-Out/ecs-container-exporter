@@ -231,11 +231,19 @@ class ECSContainerExporter(object):
         prev_usage = prev_cpu_stats.get('cpu_usage', {}).get('total_usage')
         prev_system = prev_cpu_stats.get('system_cpu_usage')
 
+        percpu_usage = cpu_stats.get('cpu_usage', {}).get('percpu_usage', [])
+        prev_percpu_usage = prev_cpu_stats.get('cpu_usage', {}).get('percpu_usage', [])
+
+        online_cpus = len(percpu_usage)
         if prev_usage and prev_system:
             usage_delta = float(curr_usage) - float(prev_usage)
             system_delta = float(curr_system) - float(prev_system)
 
-            cpu_percent = usage_delta / system_delta
+            # This doesn't seem to be calculated correctly in docker stats
+            # https://github.com/docker/cli/issues/2134
+            #
+            # Divide by number of cpus to get an average
+            cpu_percent = usage_delta / system_delta / online_cpus
         else:
             cpu_percent = 0.0
 
@@ -244,8 +252,6 @@ class ECSContainerExporter(object):
         metrics.append(metric)
 
         # per cpu metrics
-        percpu_usage = cpu_stats.get('cpu_usage', {}).get('percpu_usage', [])
-        prev_percpu_usage = prev_cpu_stats.get('cpu_usage', {}).get('percpu_usage', [])
         for i, value in enumerate(percpu_usage):
             # Skip inactive CPUs - https://github.com/torvalds/linux/commit/5ca3726
             if value != 0:
