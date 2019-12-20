@@ -330,10 +330,7 @@ class ECSContainerExporter(object):
         prev_usage = prev_cpu_stats.get('cpu_usage', {}).get('total_usage')
         prev_system = prev_cpu_stats.get('system_cpu_usage')
 
-        percpu_usage = cpu_stats.get('cpu_usage', {}).get('percpu_usage', [])
-        prev_percpu_usage = prev_cpu_stats.get('cpu_usage', {}).get('percpu_usage', [])
-
-        online_cpus = len(percpu_usage)
+        online_cpus = cpu_stats.get('online_cpus')
         if prev_usage and prev_system:
             usage_delta = float(curr_usage) - float(prev_usage)
             system_delta = float(curr_system) - float(prev_system)
@@ -351,6 +348,9 @@ class ECSContainerExporter(object):
         metrics.append(metric)
 
         # Per cpu metrics
+        percpu_usage = cpu_stats.get('cpu_usage', {}).get('percpu_usage', [])
+        prev_percpu_usage = prev_cpu_stats.get('cpu_usage', {}).get('percpu_usage', [])
+
         for i, value in enumerate(percpu_usage):
             # Skip inactive CPUs - https://github.com/torvalds/linux/commit/5ca3726
             if value != 0:
