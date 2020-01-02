@@ -11,10 +11,6 @@ from prometheus_client import start_http_server
 from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily, REGISTRY
 
 import logging
-logging.basicConfig(
-    format='%(asctime)s:%(levelname)s:%(message)s',
-    level=logging.INFO
-)
 
 # Default value is maxed out for some cgroup metrics
 CGROUP_NO_VALUE = 0x7FFFFFFFFFFFF000
@@ -177,6 +173,7 @@ class ECSContainerExporter(object):
 
         container_metrics = []
         for container_id, container_stats in stats.items():
+            self.log.debug(f'Container Stats: {container_stats}')
             if container_id in self.task_container_tags and container_stats:
                 container_metrics.extend(
                     self.parse_container_metadata(container_stats, self.task_container_tags[container_id])
@@ -432,7 +429,10 @@ def shutdown(sig_number, frame):
               help='Comma seperated list of container names to include, or use envvar INCLUDE')
 @click.option('--exclude', envvar='EXCLUDE', type=str, default=None,
               help='Comma seperated list of container names to exclude, or use envvar EXCLUDE')
-def main(metadata_url=None, include=None, exclude=None):
+@click.option('--log-level', type=str, default='INFO', help='Log level, default: INFO')
+def main(
+    metadata_url=None, include=None, exclude=None, log_level='INFO'
+):
     metadata_url = metadata_url or os.environ.get('ECS_CONTAINER_METADATA_URI', None)
 
     if not metadata_url:
@@ -441,6 +441,11 @@ def main(metadata_url=None, include=None, exclude=None):
 
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
+
+    logging.basicConfig(
+        format='%(asctime)s:%(levelname)s:%(message)s',
+        level=getattr(logging, log_level.upper())
+    )
 
     if exclude:
         exclude=exclude.strip().split(',')
