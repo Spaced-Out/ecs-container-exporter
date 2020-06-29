@@ -345,24 +345,26 @@ class ECSContainerExporter(object):
         """
         metrics = []
 
-        # Calculate cpu usage as per `docker stats` command:
-        # https://github.com/docker/cli/blob/6c12a82f330675d4e2cfff4f8b89a353bcb1fecd/cli/command/container/stats_helpers.go#L166
+        # The prev_* cpu stats are collected at an interval of 1s:
+        # https://github.com/moby/moby/blob/b50ba3da1239a56456634f74660f43a27df6b3f2/daemon/daemon.go#L1055
+        # which is used by docker stats to calculate the diff and usage %
+        #
+        # system_cpu_usage is sum of `all` cpu usage on the `host`:
+        # https://github.com/moby/moby/blob/54d88a7cd366fd8169b8a96bec5d9f303d57c425/daemon/stats/collector_unix.go#L31
         #
         curr_usage = cpu_stats.get('cpu_usage', {}).get('total_usage')
         curr_system = cpu_stats.get('system_cpu_usage')
         prev_usage = prev_cpu_stats.get('cpu_usage', {}).get('total_usage')
         prev_system = prev_cpu_stats.get('system_cpu_usage')
 
-        online_cpus = cpu_stats.get('online_cpus')
         if prev_usage and prev_system:
             usage_delta = float(curr_usage) - float(prev_usage)
             system_delta = float(curr_system) - float(prev_system)
 
-            # This doesn't seem to be calculated correctly in docker stats
-            # https://github.com/docker/cli/issues/2134
+            # Keep it to 100% instead of scaling by number of cpus :
+            # https://github.com/moby/moby/issues/29306#issuecomment-405198198
             #
-            # Divide by number of cpus to get an average
-            cpu_percent = usage_delta / system_delta / online_cpus
+            cpu_percent = usage_delta / system_delta
         else:
             cpu_percent = 0.0
 
@@ -408,6 +410,11 @@ class ECSContainerExporter(object):
         return metrics
 
     def parse_container_metadata(self, container_stats, task_container_tags):
+        """
+        More details on the exposed docker metrics
+        # https://github.com/moby/moby/blob/c1d090fcc88fa3bc5b804aead91ec60e30207538/api/types/stats.go
+
+        """
         metrics = []
         try:
             # CPU metrics
