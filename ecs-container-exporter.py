@@ -193,6 +193,32 @@ class ECSContainerExporter(object):
         metric.add_metric(labels=tags.values(), value=value)
         return metric
 
+    def calculate_network_metrics(self, network_stats, tags):
+        """
+        "networks": {
+            "eth1": {
+                "rx_bytes": 564655295,
+                "rx_packets": 384960,
+                "rx_errors": 0,
+                "rx_dropped": 0,
+                "tx_bytes": 3043269,
+                "tx_packets": 54355,
+                "tx_errors": 0,
+                "tx_dropped": 0
+            }
+        }
+
+        """
+        metrics = []
+        for iface, iface_stats in network_stats.items():
+            tags.update({'iface': iface})
+
+            for stat, value in iface_stats.items():
+                metrics.append(
+                    self.create_metric('network_'+stat+'_total', value, tags, 'counter', 'Network '+stat)
+                )
+        return metrics
+
     def calculate_io_metrics(self, blkio_stats, tags):
         """
         Calculate IO metrics from the below data:
@@ -411,6 +437,11 @@ class ECSContainerExporter(object):
             blkio_stats = container_stats.get('blkio_stats')
 
             metrics.extend(self.calculate_io_metrics(blkio_stats, task_container_tags))
+
+            # network metrics
+            network_stats = container_stats.get('networks')
+            if network_stats:
+                metrics.extend(self.calculate_network_metrics(network_stats, task_container_tags))
 
         except Exception as e:
             self.log.warning("Cold not retrieve metrics for {}: {}".format(task_container_tags, e), exc_info=True)
