@@ -20,11 +20,11 @@ class ECSContainerExporter(object):
 
     include_containers = []
     exclude_containers = []
-    _prefix = 'ecs_container_'
+    _prefix = 'ecs_task_'
     # 1 - healthy, 0 - unhealthy
     exporter_status = 1
-    # task level container metrics
-    task_container_metrics = []
+    # task level metrics
+    task_metrics = []
     # individual container tags
     task_container_tags = {}
 
@@ -50,10 +50,10 @@ class ECSContainerExporter(object):
                       f'include_containers: {self.include_containers}, '
                       f'exclude_containers: {self.exclude_containers}')
 
-        self.discover_task_metadata()
+        self.collect_task_metrics()
         REGISTRY.register(self)
 
-    def discover_task_metadata(self):
+    def collect_task_metrics(self):
         while True:
             # some wait for the task to be in running state
             time.sleep(5)
@@ -97,9 +97,22 @@ class ECSContainerExporter(object):
         self.parse_task_metadata(metadata)
 
     def parse_task_metadata(self, metadata):
-        self.task_container_metrics = []
+        self.task_metrics = []
         self.task_container_tags = {}
 
+        # task cpu limit
+        value = metadata.get('Limits', {}).get('CPU', 0)
+        metric = self.create_metric('cpu_limit', value, {},
+                                    'gauge', 'Task CPU limit')
+        self.task_metrics.append(metric)
+
+        # task mem limit
+        value = metadata.get('Limits', {}).get('Memory', 0)
+        metric = self.create_metric('mem_limit', value, {},
+                                    'gauge', 'Task Memory limit')
+        self.task_metrics.append(metric)
+
+        # container metrics
         for container in metadata['Containers']:
             container_id = container['DockerId']
             container_name = container['Name']
@@ -109,11 +122,11 @@ class ECSContainerExporter(object):
                 self.log.info(f'Processing stats for container: {container_name} - {container_id}')
                 self.task_container_tags[container_id] = {'container_name': container_name}
 
-                # Cpu limit metric
+                # container cpu limit
                 value = container.get('Limits', {}).get('CPU', 0)
-                metric = self.create_metric('cpu_limit', value, self.task_container_tags[container_id],
+                metric = self.create_metric('container_cpu_limit', value, self.task_container_tags[container_id],
                                             'gauge', 'Limit in percent of the CPU usage')
-                self.task_container_metrics.append(metric)
+                self.task_metrics.append(metric)
             else:
                 self.log.info(f'Excluding container: {container_name} - {container_id} as per exclusion')
 
@@ -131,16 +144,16 @@ class ECSContainerExporter(object):
 
     # every http request gets data from here
     def collect(self):
-        container_metrics = self.discover_container_metadata()
+        container_metrics = self.collect_container_metrics()
 
         # exporter status metric
         metric = GaugeMetricFamily(self._prefix + 'exporter_status', 'exporter status')
         metric.add_metric(value=self.exporter_status, labels=())
         container_metrics.append(metric)
 
-        return self.task_container_metrics + container_metrics
+        return self.task_metrics + container_metrics
 
-    def discover_container_metadata(self):
+    def collect_container_metrics(self):
         try:
             request = requests.get(self.task_stats_url)
 
@@ -216,7 +229,7 @@ class ECSContainerExporter(object):
 
             for stat, value in iface_stats.items():
                 metrics.append(
-                    self.create_metric('network_'+stat+'_total', value, tags, 'counter', 'Network '+stat)
+                    self.create_metric('container_network_'+stat+'_total', value, tags, 'counter', 'Network '+stat)
                 )
         return metrics
 
@@ -308,11 +321,11 @@ class ECSContainerExporter(object):
                 elif blk_stat['op'] == 'Write' and 'value' in blk_stat:
                     write_counter += blk_stat['value']
             metrics.append(
-                self.create_metric('disk_read_' + blk_type, read_counter, tags, 'counter',
+                self.create_metric('container_disk_read_' + blk_type, read_counter, tags, 'counter',
                                    'Total disk read ' + blk_type)
             )
             metrics.append(
-                self.create_metric('disk_written_' + blk_type, write_counter, tags, 'counter',
+                self.create_metric('container_disk_written_' + blk_type, write_counter, tags, 'counter',
                                    'Total disk written ' + blk_type)
             )
 
@@ -369,7 +382,7 @@ class ECSContainerExporter(object):
         else:
             cpu_percent = 0.0
 
-        metric = self.create_metric('cpu_usage_ratio', round(cpu_percent, 4), tags, 'gauge',
+        metric = self.create_metric('container_cpu_usage_ratio', round(cpu_percent, 4), tags, 'gauge',
                                     'CPU usage ratio')
         metrics.append(metric)
 
@@ -387,25 +400,25 @@ class ECSContainerExporter(object):
                     usage_percent = usage_delta / system_delta
                 else:
                     usage_percent = 0.0
-                metric = self.create_metric('percpu_usage_ratio', round(usage_percent, 4), cpu_tags, 'gauge',
+                metric = self.create_metric('container_percpu_usage_ratio', round(usage_percent, 4), cpu_tags, 'gauge',
                                             'Per CPU usage ratio')
                 metrics.append(metric)
 
         # Misc cpu metrics
         value = cpu_stats.get('cpu_usage', {}).get('usage_in_kernelmode')
-        metric = self.create_metric('cpu_kernelmode', value, tags, 'counter',
-                                    'Same as system CPU usage reported in nanoseconds')
+        metric = self.create_metric('container_cpu_kernelmode', value, tags, 'counter',
+                                    'cpu usage in kernel mode')
         metrics.append(metric)
 
         value = cpu_stats.get('cpu_usage', {}).get('usage_in_usermode')
-        metric = self.create_metric('cpu_usermode', value, tags, 'counter',
-                                    'Same as user CPU usage reported in nanoseconds')
+        metric = self.create_metric('container_cpu_usermode', value, tags, 'counter',
+                                    'cpu usage in user mode')
         metrics.append(metric)
 
         # Cpu throttling
         throttling_data = cpu_stats.get('throttling_data')
         for mkey, mvalue in throttling_data.items():
-            metric = self.create_metric('throttle_' + mkey, value, tags, 'counter')
+            metric = self.create_metric('container_throttle_' + mkey, value, tags, 'counter')
             metrics.append(metric)
 
         return metrics
@@ -431,14 +444,14 @@ class ECSContainerExporter(object):
                 value = memory_stats.get('stats', {}).get(mkey)
                 # some values have default garbage value
                 if value < CGROUP_NO_VALUE:
-                    metric = self.create_metric('mem_' + mkey, value, task_container_tags, 'gauge')
+                    metric = self.create_metric('container_mem_' + mkey, value, task_container_tags, 'gauge')
                     metrics.append(metric)
 
             for mkey in ['max_usage', 'usage', 'limit']:
                 value = memory_stats.get(mkey)
                 # some values have default garbage value
                 if value < CGROUP_NO_VALUE:
-                    metric = self.create_metric('mem_' + mkey, value, task_container_tags, 'gauge')
+                    metric = self.create_metric('container_mem_' + mkey, value, task_container_tags, 'gauge')
                     metrics.append(metric)
 
             # I/O metrics
