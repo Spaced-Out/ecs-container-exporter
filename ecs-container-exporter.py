@@ -31,6 +31,7 @@ class ECSContainerExporter(object):
     def __init__(self, metadata_url=None, include_containers=None, exclude_containers=None, http_timeout=60):
 
         self.task_metadata_url = urljoin(metadata_url + '/', 'task')
+        # For testing
         # self.task_stats_url = urljoin(metadata_url + '/', 'stats')
         self.task_stats_url = urljoin(metadata_url + '/', 'task/stats')
 
@@ -173,7 +174,7 @@ class ECSContainerExporter(object):
 
         container_metrics = []
         for container_id, container_stats in stats.items():
-            self.log.debug(f'Container Stats: {container_stats}')
+            self.log.debug(f'Container Stats: {container_id} - {container_stats}')
             if container_id in self.task_container_tags and container_stats:
                 container_metrics.extend(
                     self.parse_container_metadata(container_stats, self.task_container_tags[container_id])
@@ -451,7 +452,7 @@ class ECSContainerExporter(object):
                 metrics.extend(self.calculate_network_metrics(network_stats, task_container_tags))
 
         except Exception as e:
-            self.log.warning("Cold not retrieve metrics for {}: {}".format(task_container_tags, e), exc_info=True)
+            self.log.warning("Could not retrieve metrics for {}: {}".format(task_container_tags, e), exc_info=True)
 
         return metrics
 
