@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 ENV EXPORTER_PORT=9545
 EXPOSE ${EXPORTER_PORT}
 
-# ENV PYTHONPATH=${PYTHONPATH}:${WORK_DIR}
+ENV LOG_LEVEL=info
 ENV PYTHONUNBUFFERED=True
 ENTRYPOINT ["ecs-container-exporter"]
 CMD ["--exclude", "ecs-container-exporter,~internal~ecs~pause"]

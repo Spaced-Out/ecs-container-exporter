@@ -1,6 +1,7 @@
 .PHONY: build test
 
-TAG=latest
+TAG ?= latest
+LOG_LEVEL ?= DEBUG
 
 build:
 	docker build . -t raags/ecs-container-exporter:${TAG}
