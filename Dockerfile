@@ -1,14 +1,19 @@
-From python:3
-WORKDIR /usr/src/app
+From python:3-alpine
+ARG WORK_DIR=/usr/src/app
 
-COPY requirements.txt ./
+WORKDIR ${WORK_DIR}
+
 RUN pip install --upgrade pip
+
+# TODO: find a way to do --no-cache install with setup.py
+# instead of using requirements.txt
+COPY . .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+ENV EXPORTER_PORT=9545
+EXPOSE ${EXPORTER_PORT}
 
-EXPOSE 9545
-
+# ENV PYTHONPATH=${PYTHONPATH}:${WORK_DIR}
 ENV PYTHONUNBUFFERED=True
-ENTRYPOINT [ "./ecs-container-exporter.py" ]
+ENTRYPOINT ["ecs-container-exporter"]
 CMD ["--exclude", "ecs-container-exporter,~internal~ecs~pause"]
