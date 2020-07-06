@@ -141,13 +141,14 @@ class ECSContainerExporter(object):
             self.task_container_limits[container_id] = {'cpu': cpu_value,
                                                         'mem': mem_value}
 
-            metric = create_metric('cpu_limit', cpu_value, self.task_container_tags[container_id],
-                                   'gauge', 'Limit in percent of the CPU usage')
-            self.static_task_metrics.append(metric)
+            if container_id in self.include_container_ids:
+                metric = create_metric('cpu_limit', cpu_value, self.task_container_tags[container_id],
+                                       'gauge', 'Limit in percent of the CPU usage')
+                self.static_task_metrics.append(metric)
 
-            metric = create_metric('mem_limit', mem_value, self.task_container_tags[container_id],
-                                   'gauge', 'Limit in memory usage in MBs')
-            self.static_task_metrics.append(metric)
+                metric = create_metric('mem_limit', mem_value, self.task_container_tags[container_id],
+                                       'gauge', 'Limit in memory usage in MBs')
+                self.static_task_metrics.append(metric)
 
     def should_process_container(self, container_name, include_containers, exclude_containers):
         if container_name in exclude_containers:
