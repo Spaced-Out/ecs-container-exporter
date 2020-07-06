@@ -40,7 +40,26 @@ The `PROMETHEUS_EXPORTER_PORT` label is for ECS discovery via https://github.com
 To include or exclude application containers use the `INCLUDE` or `EXCLUDE` environment variable. By default `ecs-container-exporter`
 and `~internal~ecs~pause`, which is a Fargate internal sidecar, is excluded.
 
-# TODO
+# Metrics
 
-- IO metrics
-- Container Running Status
+## CPU
+
+CPU usage ratio is calculated and scaled as per the applicable container or task cpu limit:
+
+| Task Limit | Container Limit | Task Metric | Container Metric |
+| --- | --- | ---  | --- |
+| 0   | 0   | no scaling   | no scaling |
+| 0   | x   | no scaling   | scale cpu (can burst above 100%) |
+| x   | 0   | scale as per limit | scale as per task limit  |
+| x   | x   | scale as per limit | scale as per container limit (can burst above 100%) |
+
+## Memory
+
+Memory usage and cache is emitted separately. Memory usage include cache, so
+subtract cache from it to plot application memory usage specifically.
+
+## IO
+
+## Network
+
+Network metrics were recently added in Fargate 1.4.0 and ECS agent 1.41.0 onwards.
