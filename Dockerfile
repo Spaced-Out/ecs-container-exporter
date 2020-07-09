@@ -15,5 +15,5 @@ EXPOSE ${EXPORTER_PORT}
 
 ENV LOG_LEVEL=info
 ENV PYTHONUNBUFFERED=True
-ENTRYPOINT ["ecs-container-exporter"]
-CMD ["--exclude", "ecs-container-exporter,~internal~ecs~pause"]
+ENV EXCLUDE="ecs-container-exporter,~internal~ecs~pause"
+CMD ["ecs-container-exporter"]
