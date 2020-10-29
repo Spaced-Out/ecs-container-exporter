@@ -88,6 +88,9 @@ def calculate_io_metrics(stats, task_container_tags):
     # if this changes, the task metrics logic will change below
     metric_type = 'counter'
     for container_id, container_stats in stats.items():
+        # container_stats is None when containers are in a STOPPED state
+        if container_stats is None:
+            continue
         metrics = []
         blkio_stats = container_stats.get('blkio_stats')
 

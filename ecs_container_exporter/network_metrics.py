@@ -27,6 +27,9 @@ def calculate_network_metrics(stats, task_container_tags):
     # if this changes, the task metrics logic will change below
     metric_type = 'counter'
     for container_id, container_stats in stats.items():
+        # container_stats is None when containers are in a STOPPED state
+        if container_stats is None:
+            continue
         metrics = []
         tags = task_container_tags[container_id]
         network_stats = container_stats.get('networks')

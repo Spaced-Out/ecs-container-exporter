@@ -44,6 +44,9 @@ def calculate_cpu_metrics(stats, task_cpu_limit, task_container_limits,
 
     online_cpus = get_online_cpus(stats)
     for container_id, container_stats in stats.items():
+        # container_stats is None when containers are in a STOPPED state
+        if container_stats is None:
+            continue
         metrics = []
         tags = task_container_tags[container_id]
 
@@ -240,4 +243,7 @@ def get_online_cpus(stats):
 
     """
     for container_id, container_stats in stats.items():
+        # container_stats is None when containers are in a STOPPED state
+        if container_stats is None:
+            continue
         return container_stats['cpu_stats']['online_cpus']

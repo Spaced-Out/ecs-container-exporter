@@ -13,6 +13,9 @@ def calculate_memory_metrics(stats, task_container_tags):
     task_metrics = defaultdict(int)
     metric_type = 'gauge'
     for container_id, container_stats in stats.items():
+        # container_stats is None when containers are in a STOPPED state
+        if container_stats is None:
+            continue
         metrics = []
         tags = task_container_tags[container_id]
         memory_stats = container_stats.get('memory_stats', {})
