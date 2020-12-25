@@ -2,14 +2,15 @@
 import sys
 import time
 import click
+import pickle
 import signal
-import requests
 from requests.compat import urljoin
 
 from prometheus_client import start_http_server
 from prometheus_client.core import REGISTRY
 
-from ecs_container_exporter.utils import create_metric, task_metric_tags, create_prometheus_metric, init_statsd_client, send_statsd, TASK_CONTAINER_NAME_TAG
+from ecs_container_exporter import utils
+from ecs_container_exporter.utils import create_metric
 from ecs_container_exporter.cpu_metrics import calculate_cpu_metrics
 from ecs_container_exporter.memory_metrics import calculate_memory_metrics
 from ecs_container_exporter.io_metrics import calculate_io_metrics
@@ -35,7 +36,7 @@ class ECSContainerExporter(object):
     # individual container limits
     task_container_limits = {}
     # the Task level metrics are included by default
-    include_container_ids = [TASK_CONTAINER_NAME_TAG]
+    include_container_ids = [utils.TASK_CONTAINER_NAME_TAG]
 
     def __init__(self, metadata_url=None, include_containers=None, exclude_containers=None, http_timeout=60):
 
@@ -52,6 +53,9 @@ class ECSContainerExporter(object):
         self.http_timeout = http_timeout
 
         self.log = logging.getLogger(__name__)
+        # cacheing mainly for statsd metric type, since prometheus will run this
+        # only once its lifetime
+        self.cache_file_path = '/tmp/ecs-container-exporter.cache'
         self.collect_static_metrics()
 
     def start_prometheus_eporter(self, exporter_port):
@@ -69,49 +73,48 @@ class ECSContainerExporter(object):
             time.sleep(10)
 
     def send_statsd_metrics(self, statsd_host, statsd_port):
-        init_statsd_client(statsd_host, statsd_port)
+        utils.init_statsd_client(statsd_host, statsd_port)
         for metric in self.collect_all_metrics():
-            send_statsd(metric)
+            utils.send_statsd(metric)
+
+    def cache_load_task_metadata(self):
+        try:
+            with open(self.cache_file_path, 'rb') as cf:
+                return pickle.load(cf)
+        except FileNotFoundError:
+            pass
+
+        return None
+
+    def cache_write_task_metadata(self, data):
+        with open(self.cache_file_path, 'wb') as cf:
+            pickle.dump(data, cf)
 
     def collect_static_metrics(self):
-        while True:
-            # some wait for the task to be in running state
-            time.sleep(5)
-            try:
-                response = requests.get(self.task_metadata_url, timeout=self.http_timeout)
+        metadata = self.cache_load_task_metadata()
+        if metadata:
+            self.log.debug(f'Using cached task metadata response from {self.cache_file_path}')
+        else:
+            retries = 24
+            while True and retries > 0:
+                # wait for the task to be in running state
+                time.sleep(5)
+                retries -= 1
+                try:
+                    metadata = utils.ecs_task_metdata(self.task_metadata_url, self.http_timeout)
+                    self.cache_write_task_metadata(metadata)
+                except Exception as e:
+                    self.exporter_status = 0
+                    self.log.exception(e)
+                    continue
 
-            except requests.exceptions.Timeout:
-                msg = f'Metadata url {self.task_metadata_url} timed out after {self.http_timeout} seconds'
-                self.exporter_status = 0
-                self.log.exception(msg)
-                continue
+                if metadata.get('KnownStatus') != 'RUNNING':
+                    self.log.warning(f'ECS Task not yet in RUNNING state, current status is: {metadata["KnownStatus"]}')
+                    continue
+                else:
+                    break
 
-            except requests.exceptions.RequestException:
-                msg = f'Error fetching from Metadata url {self.task_metadata_url}'
-                self.exporter_status = 0
-                self.log.exception(msg)
-                continue
-
-            if response.status_code != 200:
-                msg = f'Url {self.task_metadata_url} responded with {response.status_code} HTTP code'
-                self.exporter_status = 0
-                self.log.error(msg)
-                continue
-
-            try:
-                metadata = response.json()
-
-            except ValueError:
-                msg = f'Cannot decode metadata url {self.task_metadata_url} response {response.text}'
-                self.exporter_status = 0
-                self.log.error(msg, exc_info=True)
-                continue
-
-            if metadata.get('KnownStatus') != 'RUNNING':
-                self.log.warning(f'ECS Task not yet in RUNNING state, current status is: {metadata["KnownStatus"]}')
-                continue
-            else:
-                break
+            self.exporter_status = 1
 
         self.log.debug(f'Discovered Task metadata: {metadata}')
         self.parse_task_metadata(metadata)
@@ -122,7 +125,7 @@ class ECSContainerExporter(object):
         self.task_container_limits = {}
 
         # task cpu/mem limit
-        task_tag = task_metric_tags()
+        task_tag = utils.task_metric_tags()
         self.task_cpu_limit, self.task_mem_limit = self.cpu_mem_limit(metadata)
 
         metric = create_metric('cpu_limit', self.task_cpu_limit, task_tag, 'gauge', 'Task CPU limit')
@@ -148,8 +151,7 @@ class ECSContainerExporter(object):
 
             # container cpu/mem limit
             cpu_value, mem_value = self.cpu_mem_limit(container)
-            self.task_container_limits[container_id] = {'cpu': cpu_value,
-                                                        'mem': mem_value}
+            self.task_container_limits[container_id] = {'cpu': cpu_value, 'mem': mem_value}
 
             if container_id in self.include_container_ids:
                 metric = create_metric('cpu_limit', cpu_value, self.task_container_tags[container_id],
@@ -195,40 +197,17 @@ class ECSContainerExporter(object):
     # prometheus exporter collect function
     def collect(self):
         for metric in self.collect_all_metrics():
-            yield create_prometheus_metric(metric)
+            yield utils.create_prometheus_metric(metric)
 
     def collect_container_metrics(self):
         metrics = []
-
         try:
-            request = requests.get(self.task_stats_url)
-
-        except requests.exceptions.Timeout:
-            msg = f'Task stats url {self.task_stats_url} timed out after {self.http_timeout} seconds'
-            self.exporter_status = 0
-            self.log.warning(msg)
-            return metrics
-
-        except requests.exceptions.RequestException:
-            msg = f'Error fetching from task stats url {self.task_stats_url}'
-            self.exporter_status = 0
-            self.log.warning(msg)
-            return metrics
-
-        if request.status_code != 200:
-            msg = f'Url {self.task_stats_url} responded with {request.status_code} HTTP code'
-            self.exporter_status = 0
-            self.log.error(msg)
-            return metrics
-
-        try:
-            stats = request.json()
+            stats = utils.ecs_task_metdata(self.task_stats_url, self.http_timeout)
             self.exporter_status = 1
 
-        except ValueError:
-            msg = 'Cannot decode task stats {self.task_stats_url} url response {request.text}'
+        except Exception as e:
             self.exporter_status = 0
-            self.log.warning(msg, exc_info=True)
+            self.log.exception(e)
             return metrics
 
         container_metrics_all = self.parse_container_metadata(stats,

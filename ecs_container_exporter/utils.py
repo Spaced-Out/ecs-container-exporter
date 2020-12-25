@@ -1,4 +1,4 @@
-import os
+import requests
 import logging
 from collections import namedtuple
 from datadog.dogstatsd.base import DogStatsd
@@ -80,6 +80,19 @@ def create_task_metrics(task_metrics, metric_type):
         )
 
     return metrics
+
+
+def ecs_task_metdata(url, timeout):
+    response = requests.get(url, timeout=timeout)
+
+    if response.status_code != 200:
+        raise f'Error: Non 200 response from url {url}'
+
+    try:
+        return response.json()
+
+    except ValueError as e:
+        raise f'Error: decoding json response from url {url} response {response.text}: {e}'
 
 
 def task_metric_tags():
