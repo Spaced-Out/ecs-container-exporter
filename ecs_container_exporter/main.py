@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import os
 import sys
 import time
 import click
@@ -10,7 +9,7 @@ from requests.compat import urljoin
 from prometheus_client import start_http_server
 from prometheus_client.core import REGISTRY
 
-from ecs_container_exporter.utils import create_metric, task_metric_tags, TASK_CONTAINER_NAME_TAG
+from ecs_container_exporter.utils import create_metric, task_metric_tags, create_prometheus_metric, init_statsd_client, send_statsd, TASK_CONTAINER_NAME_TAG
 from ecs_container_exporter.cpu_metrics import calculate_cpu_metrics
 from ecs_container_exporter.memory_metrics import calculate_memory_metrics
 from ecs_container_exporter.io_metrics import calculate_io_metrics
@@ -53,6 +52,9 @@ class ECSContainerExporter(object):
         self.http_timeout = http_timeout
 
         self.log = logging.getLogger(__name__)
+        self.collect_static_metrics()
+
+    def start_prometheus_eporter(self, exporter_port):
         self.log.info(f'Exporter initialized with '
                       f'metadata_url: {self.task_metadata_url}, '
                       f'task_stats_url: {self.task_stats_url}, '
@@ -60,8 +62,16 @@ class ECSContainerExporter(object):
                       f'include_containers: {self.include_containers}, '
                       f'exclude_containers: {self.exclude_containers}')
 
-        self.collect_static_metrics()
         REGISTRY.register(self)
+        # Start exporter http service
+        start_http_server(int(exporter_port))
+        while True:
+            time.sleep(10)
+
+    def send_statsd_metrics(self, statsd_host, statsd_port):
+        init_statsd_client(statsd_host, statsd_port)
+        for metric in self.collect_all_metrics():
+            send_statsd(metric)
 
     def collect_static_metrics(self):
         while True:
@@ -171,8 +181,8 @@ class ECSContainerExporter(object):
             cpu_limit, mem_limit
         )
 
-    # every http request gets data from here
-    def collect(self):
+    # All metrics are collected here
+    def collect_all_metrics(self):
         container_metrics = self.collect_container_metrics()
 
         # exporter status metric
@@ -181,6 +191,11 @@ class ECSContainerExporter(object):
         container_metrics.append(metric)
 
         return self.static_task_metrics + container_metrics
+
+    # prometheus exporter collect function
+    def collect(self):
+        for metric in self.collect_all_metrics():
+            yield create_prometheus_metric(metric)
 
     def collect_container_metrics(self):
         metrics = []
@@ -279,6 +294,14 @@ def shutdown(sig_number, frame):
               help='Override ECS Metadata Url')
 @click.option('--exporter-port', envvar='EXPORTER_PORT', type=int, default=9545,
               help='Change exporter listen port')
+@click.option('--use-statsd', envvar='USE_STATSD', is_flag=True, type=bool, default=False,
+              help='Emit metrics to statsd instead of starting Prometheus exporter')
+@click.option('--statsd-port', envvar='STATSD_PORT', type=int, default=None,
+              help='Override Stasd Port')
+@click.option('--statsd-host', envvar='STATSD_HOST', type=str, default='localhost',
+              help='Override Stasd Host')
+@click.option('--statsd-port', envvar='STATSD_PORT', type=int, default=8125,
+              help='Override Stasd Port')
 @click.option('--include', envvar='INCLUDE', type=str, default=None,
               help='Comma seperated list of container names to include, or use env var INCLUDE')
 @click.option('--exclude', envvar='EXCLUDE', type=str, default=None,
@@ -286,7 +309,8 @@ def shutdown(sig_number, frame):
 @click.option('--log-level', envvar='LOG_LEVEL', type=str, default='INFO',
               help='Log level, default: INFO')
 def main(
-    metadata_url=None, exporter_port=9545, include=None, exclude=None, log_level='INFO'
+    metadata_url=None, exporter_port=9545, use_statsd=False, statsd_port=8125, statsd_host='localhost',
+    include=None, exclude=None, log_level='INFO'
 ):
     if not metadata_url:
         sys.exit('AWS environment variable ECS_CONTAINER_METADATA_URI not found '
@@ -307,14 +331,14 @@ def main(
     if include:
         include=include.strip().split(',')
 
-    ECSContainerExporter(metadata_url=metadata_url,
-                         include_containers=include,
-                         exclude_containers=exclude)
+    collector = ECSContainerExporter(metadata_url=metadata_url,
+                                     include_containers=include,
+                                     exclude_containers=exclude)
 
-    # Start up the server to expose the metrics.
-    start_http_server(int(exporter_port))
-    while True:
-        time.sleep(10)
+    if use_statsd:
+        collector.send_statsd_metrics(statsd_host, statsd_port)
+    else:
+        collector.start_prometheus_eporter(exporter_port)
 
 
 if __name__ == '__main__':

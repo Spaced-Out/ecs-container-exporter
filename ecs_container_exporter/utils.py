@@ -1,33 +1,70 @@
+import os
 import logging
+from collections import namedtuple
+from datadog.dogstatsd.base import DogStatsd
 from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
 
 # special container name tag for Task level (instead of container) metrics
 TASK_CONTAINER_NAME_TAG = '_task_'
-METRIC_PREFIX = 'ecs_task_'
+METRIC_PREFIX = 'ecs_task'
 
 logging.basicConfig(
     format='%(asctime)s:%(levelname)s:%(message)s',
 )
+
+Metric = namedtuple('Metric', ['name', 'value', 'tags', 'type', 'desc'])
+
+statsd = None
+
+
+def init_statsd_client(statsd_host='localhost', statsd_port=8125):
+    global statsd
+    if not statsd:
+        statsd = DogStatsd(
+            statsd_host, statsd_port,
+            use_ms=True,
+            namespace=METRIC_PREFIX
+        )
 
 
 def get_logger(log_level):
     return logging.getLogger()
 
 
-def create_metric(name, *args):
-    return publish_metric(METRIC_PREFIX + name, *args)
+def create_metric(name, value, tags, type, desc=''):
+    return Metric(name, value, tags, type, desc)
 
 
-def publish_metric(name, value, tags, type, desc=''):
-    if type == 'counter':
-        metric = CounterMetricFamily(name, desc, labels=tags.keys())
-    elif type == 'gauge':
-        metric = GaugeMetricFamily(name, desc, labels=tags.keys())
+def create_prometheus_metric(metric):
+    metric_name = METRIC_PREFIX +'_'+ metric.name
+    if metric.type == 'counter':
+        pm = CounterMetricFamily(metric_name, metric.desc, labels=metric.tags.keys())
+    elif metric.type == 'gauge':
+        pm = GaugeMetricFamily(metric_name, metric.desc, labels=metric.tags.keys())
     else:
-        raise Exception(f'Unknown metric type: {type}')
+        raise Exception(f'Unknown metric type: {metric.type}')
 
-    metric.add_metric(labels=tags.values(), value=value)
-    return metric
+    pm.add_metric(labels=metric.tags.values(), value=metric.value)
+    return pm
+
+
+def format_dogstatsd_tags(tags):
+    """
+    {k: v} => ['k:v']
+
+    """
+    return [f'{k}:{v}' for k, v in tags.items()]
+
+
+def send_statsd(metric):
+    global statsd
+    tags = format_dogstatsd_tags(metric.tags)
+    if metric.type == 'counter':
+        statsd.increment(metric.name, metric.value, tags=tags)
+    elif metric.type == 'gauge':
+        statsd.gauge(metric.name, metric.value, tags=tags)
+    else:
+        raise Exception(f'Unknown metric type: {metric.type}')
 
 
 def create_task_metrics(task_metrics, metric_type):
