@@ -114,7 +114,7 @@ def cpu_throttle_metrics(cpu_stats, tags):
     metrics = []
     throttling_data = cpu_stats.get('throttling_data')
     for mkey, mvalue in throttling_data.items():
-        metric = create_metric('cpu_throttle_' + mkey, mvalue, tags, 'counter')
+        metric = create_metric('cpu_throttle_' + mkey, mvalue, tags, 'gauge')
         metrics.append(metric)
 
     return metrics
@@ -125,11 +125,11 @@ def cpu_user_kernelmode_metrics(cpu_stats, prev_cpu_stats, tags):
     curr_stats = cpu_stats['cpu_usage']
     prev_stats = prev_cpu_stats['cpu_usage']
     kernelmode_delta = curr_prev_diff(curr_stats, prev_stats, 'usage_in_kernelmode')
-    kernelmode_metric = create_metric('cpu_kernelmode', kernelmode_delta, tags, 'counter',
+    kernelmode_metric = create_metric('cpu_kernelmode', kernelmode_delta, tags, 'gauge',
                                       'cpu usage in kernel mode')
 
     usermode_delta = curr_prev_diff(curr_stats, prev_stats, 'usage_in_usermode')
-    usermode_metric = create_metric('cpu_usermode', usermode_delta, tags, 'counter',
+    usermode_metric = create_metric('cpu_usermode', usermode_delta, tags, 'gauge',
                                     'cpu usage in user mode')
 
     return (kernelmode_metric, usermode_metric)

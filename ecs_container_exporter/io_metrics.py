@@ -85,8 +85,8 @@ def calculate_io_metrics(stats, task_container_tags):
     metrics_by_container = {}
     # task level metrics
     task_metrics = defaultdict(int)
-    # if this changes, the task metrics logic will change below
-    metric_type = 'counter'
+    # assume these will always be gauge
+    metric_type = 'gauge'
     for container_id, container_stats in stats.items():
         metrics = []
         blkio_stats = container_stats.get('blkio_stats')
