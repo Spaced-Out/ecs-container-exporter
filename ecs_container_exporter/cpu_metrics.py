@@ -4,10 +4,17 @@ from ecs_container_exporter.utils import create_metric, task_metric_tags, TASK_C
 log = logging.getLogger(__name__)
 
 
-def calculate_cpu_metrics(stats, task_cpu_limit, task_container_limits,
+def calculate_cpu_metrics(docker_stats, task_cpu_limit, task_container_limits,
                           task_container_tags):
     """
     Calculate cpu metrics based on the docker container stats json.
+
+    The precpu_stats is calculated by docker stats api at 1s interval,
+    which is too small, instead we scample twice over a longer interval.
+    https://github.com/moby/moby/blob/b50ba3da1239a56456634f74660f43a27df6b3f2/daemon/daemon.go#L1055
+
+    `docker_stats` is a list with two samples over an interval. CPU usage
+    is caculated by comparing the `cpu_stats` of the first and second sample.
 
     Task and Container Cpu usage is `scaled` against the applicable CPU
     limits. This is more accurate than using the actual values which give
@@ -42,18 +49,18 @@ def calculate_cpu_metrics(stats, task_cpu_limit, task_container_limits,
     # Total task cpu usage
     task_cpu_usage_ratio = 0.0
 
+    prev_stats = docker_stats[0]
+    stats = docker_stats[1]
     online_cpus = get_online_cpus(stats)
     for container_id, container_stats in stats.items():
         metrics = []
         tags = task_container_tags[container_id]
 
         cpu_stats = container_stats.get('cpu_stats', {})
-        # The prev_* cpu stats are collected at an interval of 1s:
-        # https://github.com/moby/moby/blob/b50ba3da1239a56456634f74660f43a27df6b3f2/daemon/daemon.go#L1055
-        # which is used by docker stats to calculate the diff and usage %
-        prev_cpu_stats = container_stats.get('precpu_stats', {})
+        prev_cpu_stats = prev_stats[container_id].get('cpu_stats', {})
         log.debug(f'CPU Stats: {container_id} - curr {cpu_stats} - prev {prev_cpu_stats}')
 
+        # `cpu_stats` sometimes maybe empty when container is just started
         if not prev_cpu_stats:
             continue
 

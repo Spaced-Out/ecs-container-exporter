@@ -37,8 +37,10 @@ class ECSContainerExporter(object):
     task_container_limits = {}
     # the Task level metrics are included by default
     include_container_ids = [utils.TASK_CONTAINER_NAME_TAG]
+    # stats are collected and aggregated across this interval
+    interval = 60
 
-    def __init__(self, metadata_url=None, include_containers=None, exclude_containers=None, http_timeout=60):
+    def __init__(self, metadata_url=None, include_containers=None, exclude_containers=None, interval=60, http_timeout=60):
 
         self.task_metadata_url = urljoin(metadata_url + '/', 'task')
         # For testing
@@ -50,6 +52,7 @@ class ECSContainerExporter(object):
         if include_containers:
             self.include_containers = include_containers
 
+        self.interval = interval
         self.http_timeout = http_timeout
 
         self.log = logging.getLogger(__name__)
@@ -201,8 +204,18 @@ class ECSContainerExporter(object):
 
     def collect_container_metrics(self):
         metrics = []
+        docker_stats = []
+        # collect two stats samples as per the configured interval
         try:
-            stats = utils.ecs_task_metdata(self.task_stats_url, self.http_timeout)
+            docker_stats.append(
+                utils.ecs_task_metdata(self.task_stats_url, self.http_timeout)
+            )
+            # ECS stats API returns immediately, but docker stats waits for 1s adjust this accordingly
+            time.sleep(self.interval)
+
+            docker_stats.append(
+                utils.ecs_task_metdata(self.task_stats_url, self.http_timeout)
+            )
             self.exporter_status = 1
 
         except Exception as e:
@@ -210,7 +223,7 @@ class ECSContainerExporter(object):
             self.log.exception(e)
             return metrics
 
-        container_metrics_all = self.parse_container_metadata(stats,
+        container_metrics_all = self.parse_container_metadata(docker_stats,
                                                               self.task_cpu_limit,
                                                               self.task_container_limits,
                                                               self.task_container_tags)
@@ -224,7 +237,7 @@ class ECSContainerExporter(object):
 
         return filtered_container_metrics
 
-    def parse_container_metadata(self, stats, task_cpu_limit,
+    def parse_container_metadata(self, docker_stats, task_cpu_limit,
                                  task_container_limits, task_container_tags):
         """
         More details on the exposed docker metrics
@@ -235,7 +248,7 @@ class ECSContainerExporter(object):
         try:
             # CPU metrics
             container_metrics_all.append(
-                calculate_cpu_metrics(stats,
+                calculate_cpu_metrics(docker_stats,
                                       task_cpu_limit,
                                       task_container_limits,
                                       task_container_tags)
@@ -243,17 +256,17 @@ class ECSContainerExporter(object):
 
             # Memory metrics
             container_metrics_all.append(
-                calculate_memory_metrics(stats, task_container_tags)
+                calculate_memory_metrics(docker_stats[1], task_container_tags)
             )
 
             # I/O metrics
             container_metrics_all.append(
-                calculate_io_metrics(stats, task_container_tags)
+                calculate_io_metrics(docker_stats[1], task_container_tags)
             )
 
             # network metrics
             container_metrics_all.append(
-                calculate_network_metrics(stats, task_container_tags)
+                calculate_network_metrics(docker_stats[1], task_container_tags)
             )
 
         except Exception as e:
@@ -285,11 +298,14 @@ def shutdown(sig_number, frame):
               help='Comma seperated list of container names to include, or use env var INCLUDE')
 @click.option('--exclude', envvar='EXCLUDE', type=str, default=None,
               help='Comma seperated list of container names to exclude, or use env var EXCLUDE')
+@click.option('--interval', envvar='INTERVAL', type=int, default=60,
+              help='Stats collection and aggregation interval in seconds.'
+              'Stats are sampled in this interval and aggregated(specifically for CPU stats)')
 @click.option('--log-level', envvar='LOG_LEVEL', type=str, default='INFO',
               help='Log level, default: INFO')
 def main(
     metadata_url=None, exporter_port=9545, use_statsd=False, statsd_port=8125, statsd_host='localhost',
-    include=None, exclude=None, log_level='INFO'
+    include=None, exclude=None, interval=60, log_level='INFO'
 ):
     if not metadata_url:
         sys.exit('AWS environment variable ECS_CONTAINER_METADATA_URI not found '
@@ -312,7 +328,8 @@ def main(
 
     collector = ECSContainerExporter(metadata_url=metadata_url,
                                      include_containers=include,
-                                     exclude_containers=exclude)
+                                     exclude_containers=exclude,
+                                     interval=interval)
 
     if use_statsd:
         collector.send_statsd_metrics(statsd_host, statsd_port)

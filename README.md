@@ -42,6 +42,9 @@ and `~internal~ecs~pause`, which is a Fargate internal sidecar, is excluded.
 
 # Metrics
 
+The metrics are sampled twice as per the configured `interval` (default 60s).  This should be set to the Prometheus scrape interval.
+
+
 ## CPU
 
 CPU usage ratio is calculated and scaled as per the applicable container or task cpu limit:

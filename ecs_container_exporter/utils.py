@@ -86,13 +86,13 @@ def ecs_task_metdata(url, timeout):
     response = requests.get(url, timeout=timeout)
 
     if response.status_code != 200:
-        raise f'Error: Non 200 response from url {url}'
+        raise Exception(f'Error: Non 200 response from url {url}')
 
     try:
         return response.json()
 
     except ValueError as e:
-        raise f'Error: decoding json response from url {url} response {response.text}: {e}'
+        raise Exception(f'Error: decoding json response from url {url} response {response.text}: {e}')
 
 
 def task_metric_tags():
