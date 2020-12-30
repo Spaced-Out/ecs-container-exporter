@@ -216,6 +216,9 @@ class ECSContainerExporter(object):
             docker_stats.append(
                 utils.ecs_task_metdata(self.task_stats_url, self.http_timeout)
             )
+            if not all(docker_stats):
+                raise Exception('Some stats are empty, try again')
+
             self.exporter_status = 1
 
         except Exception as e:
