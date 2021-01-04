@@ -21,6 +21,7 @@ setup(
     license='MIT License',
     description='Prometheus exporter for AWS ECS Task and Container Metrics',
     long_description=long_desc,
+    long_description_content_type="text/markdown",
     install_requires=['setuptools>=36.0.0',
                       'Click==7.0',
                       'prometheus-client==0.7.1',
