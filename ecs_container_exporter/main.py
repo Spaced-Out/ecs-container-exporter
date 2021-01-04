@@ -291,8 +291,6 @@ def shutdown(sig_number, frame):
               help='Change exporter listen port')
 @click.option('--use-statsd', envvar='USE_STATSD', is_flag=True, type=bool, default=False,
               help='Emit metrics to statsd instead of starting Prometheus exporter')
-@click.option('--statsd-port', envvar='STATSD_PORT', type=int, default=None,
-              help='Override Stasd Port')
 @click.option('--statsd-host', envvar='STATSD_HOST', type=str, default='localhost',
               help='Override Stasd Host')
 @click.option('--statsd-port', envvar='STATSD_PORT', type=int, default=8125,
@@ -302,8 +300,7 @@ def shutdown(sig_number, frame):
 @click.option('--exclude', envvar='EXCLUDE', type=str, default=None,
               help='Comma seperated list of container names to exclude, or use env var EXCLUDE')
 @click.option('--interval', envvar='INTERVAL', type=int, default=60,
-              help='Stats collection and aggregation interval in seconds.'
-              'Stats are sampled in this interval and aggregated(specifically for CPU stats)')
+              help='Stats collection and aggregation interval in seconds (specifically for CPU stats)'
 @click.option('--log-level', envvar='LOG_LEVEL', type=str, default='INFO',
               help='Log level, default: INFO')
 def main(
