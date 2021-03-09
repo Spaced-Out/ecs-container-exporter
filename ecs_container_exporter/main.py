@@ -300,7 +300,7 @@ def shutdown(sig_number, frame):
 @click.option('--exclude', envvar='EXCLUDE', type=str, default=None,
               help='Comma seperated list of container names to exclude, or use env var EXCLUDE')
 @click.option('--interval', envvar='INTERVAL', type=int, default=60,
-              help='Stats collection and aggregation interval in seconds (specifically for CPU stats)'
+              help='Stats collection and aggregation interval in seconds (specifically for CPU stats)')
 @click.option('--log-level', envvar='LOG_LEVEL', type=str, default='INFO',
               help='Log level, default: INFO')
 def main(
