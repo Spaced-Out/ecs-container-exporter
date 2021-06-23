@@ -253,6 +253,14 @@ class ECSContainerExporter(object):
 
         """
         container_metrics_all = []
+
+        # ignore stats for containers in STOPPED state
+        for container_id in list(docker_stats[1].keys()):
+            if not docker_stats[1][container_id]:
+                del(docker_stats[0][container_id])
+                del(docker_stats[1][container_id])
+                self.log.debug(f'Ignoring null stats for container_id {container_id}')
+
         try:
             # CPU metrics
             container_metrics_all.append(
