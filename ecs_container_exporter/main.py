@@ -178,17 +178,12 @@ class ECSContainerExporter(object):
                 return True
 
     def cpu_mem_limit(self, metadata):
-        cpu_limit = metadata.get('Limits', {}).get('CPU', 0)
-
-        # Can be CPU shares or CPU units
-        # normalize to `CPU shares` since 256 is min share
-        scale_factor = 1024 if cpu_limit < 256 else 1
-
+        # normalise to `cpu shares`
+        cpu_limit = metadata.get('Limits', {}).get('CPU', 0) * 1024
         mem_limit = metadata.get('Limits', {}).get('Memory', 0)
 
         return (
-            cpu_limit * scale_factor,
-            mem_limit
+            cpu_limit, mem_limit
         )
 
     # All metrics are collected here
