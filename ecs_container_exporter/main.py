@@ -129,7 +129,7 @@ class ECSContainerExporter(object):
 
         # task cpu/mem limit
         task_tag = utils.task_metric_tags()
-        self.task_cpu_limit, self.task_mem_limit = self.cpu_mem_limit(metadata)
+        self.task_cpu_limit, self.task_mem_limit = self.cpu_mem_limit(metadata, normalise_cpu=True)
 
         metric = create_metric('cpu_limit', self.task_cpu_limit, task_tag, 'gauge', 'Task CPU limit')
         self.static_task_metrics.append(metric)
@@ -177,9 +177,9 @@ class ECSContainerExporter(object):
             else:
                 return True
 
-    def cpu_mem_limit(self, metadata):
+    def cpu_mem_limit(self, metadata, normalise_cpu=False):
         # normalise to `cpu shares`
-        cpu_limit = metadata.get('Limits', {}).get('CPU', 0) * 1024
+        cpu_limit = metadata.get('Limits', {}).get('CPU', 0) * (1024 if normalise_cpu else 1)
         mem_limit = metadata.get('Limits', {}).get('Memory', 0)
 
         return (
