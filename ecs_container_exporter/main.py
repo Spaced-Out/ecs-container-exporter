@@ -38,9 +38,11 @@ class ECSContainerExporter(object):
     # the Task level metrics are included by default
     include_container_ids = [utils.TASK_CONTAINER_NAME_TAG]
     # stats are collected and aggregated across this interval
-    interval = 60
+    # default to 55s for scrape_interval and scrape_timeout of 1m
+    # should be set to 60 when using statsd, which doesn't have this issue
+    interval = 55
 
-    def __init__(self, metadata_url=None, include_containers=None, exclude_containers=None, interval=60, http_timeout=60):
+    def __init__(self, metadata_url=None, include_containers=None, exclude_containers=None, interval=55, http_timeout=60):
 
         self.task_metadata_url = urljoin(metadata_url + '/', 'task')
         # For testing
@@ -307,13 +309,13 @@ def shutdown(sig_number, frame):
               help='Comma seperated list of container names to include, or use env var INCLUDE')
 @click.option('--exclude', envvar='EXCLUDE', type=str, default=None,
               help='Comma seperated list of container names to exclude, or use env var EXCLUDE')
-@click.option('--interval', envvar='INTERVAL', type=int, default=60,
+@click.option('--interval', envvar='INTERVAL', type=int, default=55,
               help='Stats collection and aggregation interval in seconds (specifically for CPU stats)')
 @click.option('--log-level', envvar='LOG_LEVEL', type=str, default='INFO',
               help='Log level, default: INFO')
 def main(
     metadata_url=None, exporter_port=9545, use_statsd=False, statsd_port=8125, statsd_host='localhost',
-    include=None, exclude=None, interval=60, log_level='INFO'
+    include=None, exclude=None, interval=55, log_level='INFO'
 ):
     if not metadata_url:
         sys.exit('AWS environment variable ECS_CONTAINER_METADATA_URI not found '
