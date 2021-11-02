@@ -1,0 +1,34 @@
+name: CI
+env:
+  GITHUB_REF: ${{ github.ref }}
+  AWS_DEFAULT_REGION: "us-west-2"
+  AWS_ACCESS_KEY_ID: ${{ secrets.DEPLOY_AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.DEPLOY_AWS_SECRET_ACCESS_KEY }}
+  GITHUB_ACTION_ROLE_ARN: "arn:aws:iam::960164992836:role/github-actions"
+  AWS_ACCOUNT_ID: "960164992836"
+
+on:
+  push:
+    branches:
+      - "**"
+
+jobs:
+  build-and-push-container:
+    name: Build and push container
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        python: ["3.9"]
+        os: ["ubuntu-20.04"]
+    steps:
+      - name: checkout
+        uses: actions/checkout/@v2
+
+      - name: deploy to ECR
+        if: |
+          success() && (github.ref == 'refs/heads/main')
+        env:
+          IMAGE_NAME: 'viso-ecs-container-exporter'
+        working-directory: ./scripts
+        run: ./build_and_deploy.sh
