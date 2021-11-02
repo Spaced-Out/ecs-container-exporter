@@ -27,7 +27,7 @@ jobs:
 
       - name: deploy to ECR
         if: |
-          success() && (github.ref == 'refs/heads/main')
+          success() && (github.ref == 'refs/heads/master')
         env:
           IMAGE_NAME: 'viso-ecs-container-exporter'
         working-directory: ./scripts
