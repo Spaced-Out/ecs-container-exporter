@@ -295,7 +295,7 @@ def shutdown(sig_number, frame):
 
 
 @click.command()
-@click.option('--metadata-url', envvar='ECS_CONTAINER_METADATA_URI', type=str, default=None,
+@click.option('--metadata-url', envvar='ECS_CONTAINER_METADATA_URI_V4', type=str, default=None,
               help='Override ECS Metadata Url')
 @click.option('--exporter-port', envvar='EXPORTER_PORT', type=int, default=9545,
               help='Change exporter listen port')
