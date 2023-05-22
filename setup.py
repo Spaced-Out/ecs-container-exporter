@@ -25,7 +25,7 @@ setup(
     install_requires=['setuptools>=36.0.0',
                       'Click==7.0',
                       'prometheus-client==0.7.1',
-                      'requests==2.22.0',
+                      'requests==2.31.0',
                       'datadog==0.39.0'],
     packages=['ecs_container_exporter'],
     entry_points={
