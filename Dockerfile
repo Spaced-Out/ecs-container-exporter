@@ -1,4 +1,4 @@
-From python:3-alpine
+From python:3.9-alpine
 ARG WORK_DIR=/usr/src/app
 
 WORKDIR ${WORK_DIR}
@@ -16,4 +16,4 @@ EXPOSE ${EXPORTER_PORT}
 ENV LOG_LEVEL=info
 ENV PYTHONUNBUFFERED=True
 ENV EXCLUDE="ecs-container-exporter,~internal~ecs~pause"
-CMD ["ecs-container-exporter"]
+CMD ["/usr/local/bin/ecs-container-exporter"]
