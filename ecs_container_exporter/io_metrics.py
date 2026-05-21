@@ -95,7 +95,7 @@ def calculate_io_metrics(stats, task_container_tags):
         for blk_key, blk_type in iostats.items():
             tags = task_container_tags[container_id]
             read_counter = write_counter = 0
-            for blk_stat in blkio_stats.get(blk_key):
+            for blk_stat in blkio_stats.get(blk_key) or []:
                 if blk_stat['op'] == 'Read' and 'value' in blk_stat:
                     read_counter += blk_stat['value']
                 elif blk_stat['op'] == 'Write' and 'value' in blk_stat:
