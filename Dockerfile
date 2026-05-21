@@ -1,4 +1,4 @@
-From python:3-alpine
+From python:3.10-alpine
 ARG WORK_DIR=/usr/src/app
 
 WORKDIR ${WORK_DIR}
