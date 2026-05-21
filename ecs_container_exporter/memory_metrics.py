@@ -20,8 +20,8 @@ def calculate_memory_metrics(stats, task_container_tags):
 
         for mkey in ['cache']:
             value = memory_stats.get('stats', {}).get(mkey)
-            # some values have default garbage value
-            if value < CGROUP_NO_VALUE:
+            # some values have default garbage value; cgroup v2 (AL2023) removed 'cache' key
+            if value is not None and value < CGROUP_NO_VALUE:
                 metric = create_metric('mem_' + mkey, value, tags, metric_type)
                 metrics.append(metric)
                 if mkey == 'cache':
@@ -30,7 +30,7 @@ def calculate_memory_metrics(stats, task_container_tags):
         for mkey in ['usage']:
             value = memory_stats.get(mkey)
             # some values have default garbage value
-            if value < CGROUP_NO_VALUE:
+            if value is not None and value < CGROUP_NO_VALUE:
                 metric = create_metric('mem_' + mkey, value, tags, metric_type)
                 metrics.append(metric)
                 if mkey == 'usage':
